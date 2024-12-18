@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>3D Cube Game</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #menu, #gameOverMenu {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 24px;
+            display: none;
+        }
+        button {
+            margin: 10px;
+            padding: 10px 20px;
+            font-size: 18px;
+        }
+        #score {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 24px;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div id="menu">
+        <div>
+            <h1>3D Cube Game</h1>
+            <button onclick="startGame()">Play</button>
+        </div>
+    </div>
+    <div id="gameOverMenu">
+        <div>
+            <h1>Game Over</h1>
+            <button onclick="restartGame()">Restart</button>
+            <button onclick="goToMenu()">Exit</button>
+        </div>
+    </div>
+    <div id="score" style="display: none;">Score: 0</div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let scene, camera, renderer, cube, floor, sky, obstacles = [], frame = 0, playing = false, score = 0, scoreInterval;
+        const clock = new THREE.Clock();
+        const gravity = 0.5;
+        let velocityY = 0;
+        let isJumping = false;
+
+        init();
+        showMenu();
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.body.appendChild(renderer.domElement);
+
+            // Create the floor
+            const floorGeometry = new THREE.PlaneGeometry(200, 200);
+            const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+            floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = Math.PI / 2;
+            floor.position.y = -0.5;
+            floor.receiveShadow = true;
+            scene.add(floor);
+            console.log('Floor created:', floor);
+
+            // Create the player cube
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshStandardMaterial({ color: 0x0000ff });
+            cube = new THREE.Mesh(geometry, material);
+            cube.position.set(0, 0.5, 0);
+            cube.castShadow = true;
+            scene.add(cube);
+
+            // Create the sky
+            const skyGeometry = new THREE.SphereGeometry(100, 32, 32);
+            const skyMaterial = new THREE.MeshBasicMaterial({ color: 0x87CEEB, side: THREE.BackSide });
+            sky = new THREE.Mesh(skyGeometry, skyMaterial);
+            scene.add(sky);
+            console.log('Sky created:', sky);
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 5, 5).normalize();
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+
+            camera.position.set(0, 2, 5);
+            camera.lookAt(cube.position);
+
+            // Event listener for jumping
+            document.addEventListener('keydown', onDocumentKeyDown, false);
+            document.addEventListener('touchstart', onDocumentTouch, false);
+        }
+
+        function onDocumentKeyDown(event) {
+            if (event.code === 'Space' && !isJumping && playing) {
+                isJumping = true;
+                velocityY = 0.2;
+            }
+        }
+
+        function onDocumentTouch(event) {
+            if (!isJumping && playing) {
+                isJumping = true;
+                velocityY = 0.2;
+            }
+        }
+
+        function animate() {
+            if (playing) {
+                requestAnimationFrame(animate);
+                renderer.render(scene, camera);
+
+                const delta = clock.getDelta();
+                if (isJumping) {
+                    velocityY -= gravity * delta;
+                    cube.position.y += velocityY;
+
+                    if (cube.position.y <= 0.5) {
+                        cube.position.y = 0.5;
+                        isJumping = false;
+                        velocityY = 0;
+                    }
+                }
+
+                // Update floor position to follow the cube
+                floor.position.z = cube.position.z;
+
+                camera.position.z = cube.position.z + 5;
+                camera.position.x = cube.position.x;
+                camera.position.y = cube.position.y + 2;
+                camera.lookAt(cube.position);
+
+                frame++;
+                if (frame % 100 === 0) {
+                    createObstacle();
+                }
+
+                for (let i = obstacles.length - 1; i >= 0; i--) {
+                    obstacles[i].position.z += 0.1;
+                    if (obstacles[i].position.z > cube.position.z + 10) {
+                        scene.remove(obstacles[i]);
+                        obstacles.splice(i, 1);
+                    }
+
+                    // Collision detection
+                    const box1 = new THREE.Box3().setFromObject(cube);
+                    const box2 = new THREE.Box3().setFromObject(obstacles[i]);
+
+                    if (box1.intersectsBox(box2)) {
+                        gameOver();
+                    }
+                }
+            }
+        }
+
+        function createObstacle() {
+            const geometry = new THREE.ConeGeometry(0.5, 1, 8);
+            const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+            const obstacle = new THREE.Mesh(geometry, material);
+            obstacle.position.set((Math.random() - 0.5) * 10, 0.5, cube.position.z - 20);
+            obstacle.castShadow = true;
+            scene.add(obstacle);
+            obstacles.push(obstacle);
+        }
+
+        function showMenu() {
+            document.body.style.background = 'black';
+            document.getElementById('menu').style.display = 'flex';
+        }
+
+        function hideMenu() {
+            document.getElementById('menu').style.display = 'none';
+        }
+
+        function showGameOverMenu() {
+            document.getElementById('gameOverMenu').style.display = 'flex';
+        }
+
+        function hideGameOverMenu() {
+            document.getElementById('gameOverMenu').style.display = 'none';
+        }
+
+        function startGame() {
+            playing = true;
+            hideMenu();
+            document.getElementById('score').style.display = 'block';
+            score = 0;
+            document.getElementById('score').innerText = 'Score: ' + score;
+            scoreInterval = setInterval(() => {
+                score++;
+                document.getElementById('score').innerText = 'Score: ' + score;
+            }, 1000);
+            animate();
+        }
+
+        function restartGame() {
+            playing = true;
+            obstacles.forEach(obstacle => scene.remove(obstacle));
+            obstacles = [];
+            cube.position.set(0, 0.5, 0);
+            frame = 0;
+            document.getElementById('score').innerText = 'Score: ' + score;
+            hideGameOverMenu();
+            animate();
+        }
+
+        function goToMenu() {
+            playing = false;
+            clearInterval(scoreInterval);
+            obstacles.forEach(obstacle => scene.remove(obstacle));
+            obstacles = [];
+            cube.position.set(0, 0.5, 0);
+            frame = 0;
+            document.getElementById('score').style.display = 'none';
+            hideGameOverMenu();
+            showMenu();
+        }
+
+        function gameOver() {
+            playing = false;
+            clearInterval(scoreInterval);
+            showGameOverMenu();
+        }
+    </script>
+</body>
+</html>
