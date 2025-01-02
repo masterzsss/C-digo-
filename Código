@@ -1,244 +1,266 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>3D Cube Game</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MS-DOS Emulator</title>
     <style>
-        body { margin: 0; overflow: hidden; }
-        #menu, #gameOverMenu {
+        @font-face {
+            font-family: 'MS-DOS';
+            src: url('front.ttf') format('truetype'); /* Ensure the path is correct */
+        }
+
+        body {
+            background-color: black;
+            color: #00FF00;
+            font-family: 'MS-DOS', monospace;
+            padding: 20px;
+            overflow: hidden;
+            user-select: none; /* Prevent text selection */
+            position: relative;
+        }
+
+        #terminal-container {
+            position: relative;
+            width: 100%;
+            height: 300px;
+            border: 1px solid #00FF00;
+            overflow: hidden;
+        }
+
+        #background-animation, #overlay-animation {
             position: absolute;
+            top: 0;
+            left: 0;
             width: 100%;
             height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            font-family: Arial, sans-serif;
-            font-size: 24px;
-            display: none;
+            z-index: 1;
+            background: repeating-linear-gradient(0deg, rgba(0, 255, 0, 0.1) 0, rgba(0, 255, 0, 0.1) 1px, rgba(0, 0, 0, 0.1) 1px, rgba(0, 0, 0, 0.1) 2px);
         }
-        button {
-            margin: 10px;
-            padding: 10px 20px;
-            font-size: 18px;
+
+        #background-animation {
+            animation: screenFlicker 0.1s infinite;
         }
-        #score {
+
+        #overlay-animation {
+            z-index: 3;
+            animation: slowFlicker 3s infinite;
+            mix-blend-mode: multiply;
+        }
+
+        @keyframes screenFlicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.95; }
+        }
+
+        @keyframes slowFlicker {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+
+        #terminal {
             position: absolute;
-            top: 10px;
-            left: 10px;
-            font-size: 24px;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            padding: 10px;
+            background: none;
+            overflow-y: auto;
+        }
+
+        #input-line {
+            display: flex;
+            background: none;
+        }
+
+        #prompt {
+            flex: none;
+        }
+
+        #input {
+            flex: auto;
+            border: none;
+            background: none;
+            color: #00FF00;
+            font-family: 'MS-DOS', monospace;
+            outline: none;
+        }
+
+        .error {
+            color: red;
+        }
+
+        .crash {
+            color: red;
+            font-weight: bold;
+            animation: crashBlink 0.5s infinite;
+        }
+
+        @keyframes crashBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        #windows-interface {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #008080;
             color: white;
             font-family: Arial, sans-serif;
+            z-index: 4;
+        }
+
+        #windows-interface .window {
+            position: absolute;
+            top: 50px;
+            left: 50px;
+            width: 200px;
+            height: 150px;
+            background-color: white;
+            color: black;
+            border: 2px solid black;
+            padding: 10px;
+            box-shadow: 2px 2px 0px rgba(0, 0, 0, 0.5);
+        }
+
+        #windows-interface .window h1 {
+            margin: 0;
+            font-size: 16px;
+            background-color: navy;
+            color: white;
+            padding: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #windows-interface .window p {
+            margin: 20px 0 0 0;
+        }
+
+        #close-button {
+            cursor: pointer;
+            background-color: red;
+            color: white;
+            border: none;
+            padding: 2px 5px;
+            font-size: 14px;
         }
     </style>
 </head>
-<body>
-    <div id="menu">
-        <div>
-            <h1>3D Cube Game</h1>
-            <button onclick="startGame()">Play</button>
+<body ontouchstart="focusInput()">
+    <div id="terminal-container">
+        <div id="background-animation"></div>
+        <div id="overlay-animation"></div>
+        <div id="terminal" onclick="focusInput();">
+            <div>Microsoft DOS [Version 6.22]</div>
+            <div>(C)Copyright Microsoft Corp 1981-1994.</div>
+            <div id="input-line">
+                <div id="prompt">C:\></div>
+                <input type="text" id="input" autofocus>
+            </div>
+        </div>
+        <div id="windows-interface">
+            <div class="window">
+                <h1>Message <button id="close-button">X</button></h1>
+                <p>Really! Why do you try?</p>
+            </div>
         </div>
     </div>
-    <div id="gameOverMenu">
-        <div>
-            <h1>Game Over</h1>
-            <button onclick="restartGame()">Restart</button>
-            <button onclick="goToMenu()">Exit</button>
-        </div>
-    </div>
-    <div id="score" style="display: none;">Score: 0</div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
     <script>
-        let scene, camera, renderer, cube, floor, sky, obstacles = [], frame = 0, playing = false, score = 0, scoreInterval;
-        const clock = new THREE.Clock();
-        const gravity = 0.5;
-        let velocityY = 0;
-        let isJumping = false;
-
-        init();
-        showMenu();
-
-        function init() {
-            scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
-            document.body.appendChild(renderer.domElement);
-
-            // Create the floor
-            const floorGeometry = new THREE.PlaneGeometry(200, 200);
-            const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
-            floor = new THREE.Mesh(floorGeometry, floorMaterial);
-            floor.rotation.x = Math.PI / 2;
-            floor.position.y = -0.5;
-            floor.receiveShadow = true;
-            scene.add(floor);
-            console.log('Floor created:', floor);
-
-            // Create the player cube
-            const geometry = new THREE.BoxGeometry(1, 1, 1);
-            const material = new THREE.MeshStandardMaterial({ color: 0x0000ff });
-            cube = new THREE.Mesh(geometry, material);
-            cube.position.set(0, 0.5, 0);
-            cube.castShadow = true;
-            scene.add(cube);
-
-            // Create the sky
-            const skyGeometry = new THREE.SphereGeometry(100, 32, 32);
-            const skyMaterial = new THREE.MeshBasicMaterial({ color: 0x87CEEB, side: THREE.BackSide });
-            sky = new THREE.Mesh(skyGeometry, skyMaterial);
-            scene.add(sky);
-            console.log('Sky created:', sky);
-
-            // Lighting
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-            scene.add(ambientLight);
-
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-            directionalLight.position.set(5, 5, 5).normalize();
-            directionalLight.castShadow = true;
-            scene.add(directionalLight);
-
-            camera.position.set(0, 2, 5);
-            camera.lookAt(cube.position);
-
-            // Event listener for jumping
-            document.addEventListener('keydown', onDocumentKeyDown, false);
-            document.addEventListener('touchstart', onDocumentTouch, false);
-        }
-
-        function onDocumentKeyDown(event) {
-            if (event.code === 'Space' && !isJumping && playing) {
-                isJumping = true;
-                velocityY = 0.2;
-            }
-        }
-
-        function onDocumentTouch(event) {
-            if (!isJumping && playing) {
-                isJumping = true;
-                velocityY = 0.2;
-            }
-        }
-
-        function animate() {
-            if (playing) {
-                requestAnimationFrame(animate);
-                renderer.render(scene, camera);
-
-                const delta = clock.getDelta();
-                if (isJumping) {
-                    velocityY -= gravity * delta;
-                    cube.position.y += velocityY;
-
-                    if (cube.position.y <= 0.5) {
-                        cube.position.y = 0.5;
-                        isJumping = false;
-                        velocityY = 0;
-                    }
+        const terminal = document.getElementById('terminal');
+        const inputLine = document.getElementById('input-line');
+        const input = document.getElementById('input');
+        const prompt = document.getElementById('prompt');
+        const windowsInterface = document.getElementById('windows-interface');
+        const closeButton = document.getElementById('close-button');
+        
+        const commands = {
+            help: 'Available commands: help, dir, echo, cls, exit, cd, time, win',
+            dir: '<span class="error">No disks found.</span>',
+            echo: (args) => args.join(' '),
+            cls: () => {
+                terminal.innerHTML = 'Microsoft DOS [Version 6.22]<br>(C)Copyright Microsoft Corp 1981-1994.<br>';
+                terminal.appendChild(inputLine);
+            },
+            exit: () => alert('Closing the emulator.'),
+            cd: (args) => {
+                if (args.length > 0) {
+                    const dir = args[0];
+                    terminal.innerHTML += `<div>C:\\>cd ${dir}</div><div class="error">Because you killed me</div>`;
+                    setTimeout(crashSystem, 2000);
+                } else {
+                    return '<span class="error">Directory name missing.</span>';
                 }
-
-                // Update floor position to follow the cube
-                floor.position.z = cube.position.z;
-
-                camera.position.z = cube.position.z + 5;
-                camera.position.x = cube.position.x;
-                camera.position.y = cube.position.y + 2;
-                camera.lookAt(cube.position);
-
-                frame++;
-                if (frame % 100 === 0) {
-                    createObstacle();
-                }
-
-                for (let i = obstacles.length - 1; i >= 0; i--) {
-                    obstacles[i].position.z += 0.1;
-                    if (obstacles[i].position.z > cube.position.z + 10) {
-                        scene.remove(obstacles[i]);
-                        obstacles.splice(i, 1);
-                    }
-
-                    // Collision detection
-                    const box1 = new THREE.Box3().setFromObject(cube);
-                    const box2 = new THREE.Box3().setFromObject(obstacles[i]);
-
-                    if (box1.intersectsBox(box2)) {
-                        gameOver();
-                    }
-                }
+            },
+            time: () => {
+                const now = new Date();
+                return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')} ${String(now.getDate()).padStart(2, '0')}/06/1994`;
+            },
+            win: () => {
+                windowsInterface.style.display = 'block';
+                input.disabled = true;
+                return 'Starting Windows 1.0...';
             }
-        }
+        };
 
-        function createObstacle() {
-            const geometry = new THREE.ConeGeometry(0.5, 1, 8);
-            const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-            const obstacle = new THREE.Mesh(geometry, material);
-            obstacle.position.set((Math.random() - 0.5) * 10, 0.5, cube.position.z - 20);
-            obstacle.castShadow = true;
-            scene.add(obstacle);
-            obstacles.push(obstacle);
-        }
+        const closeWindowsInterface = () => {
+            windowsInterface.style.display = 'none';
+            input.disabled = false;
+            terminal.innerHTML += `<div class="error">Maybe next time</div>`;
+            terminal.appendChild(inputLine);
+            focusInput();
+        };
 
-        function showMenu() {
-            document.body.style.background = 'black';
-            document.getElementById('menu').style.display = 'flex';
-        }
+        const crashSystem = () => {
+            terminal.innerHTML = '';
+            const crashMessage = document.createElement('div');
+            crashMessage.classList.add('crash');
+            crashMessage.textContent = 'Please restart the system';
+            terminal.appendChild(crashMessage);
 
-        function hideMenu() {
-            document.getElementById('menu').style.display = 'none';
-        }
+            const blink = () => {
+                crashMessage.style.opacity = crashMessage.style.opacity === '0' ? '1' : '0';
+                setTimeout(blink, Math.random() * (1000 - 300) + 300);
+            };
+            blink();
 
-        function showGameOverMenu() {
-            document.getElementById('gameOverMenu').style.display = 'flex';
-        }
+            input.disabled = true;
+            input.placeholder = "Reload the page to continue";
+        };
 
-        function hideGameOverMenu() {
-            document.getElementById('gameOverMenu').style.display = 'none';
-        }
+        const focusInput = () => {
+            input.focus();
+            setTimeout(() => {
+                if (document.activeElement !== input) {
+                    input.focus();
+                }
+            }, 50);
+        };
 
-        function startGame() {
-            playing = true;
-            hideMenu();
-            document.getElementById('score').style.display = 'block';
-            score = 0;
-            document.getElementById('score').innerText = 'Score: ' + score;
-            scoreInterval = setInterval(() => {
-                score++;
-                document.getElementById('score').innerText = 'Score: ' + score;
-            }, 1000);
-            animate();
-        }
+        input.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !input.disabled) {
+                const commandLine = input.value.trim().toLowerCase();
+                if (commandLine) {
+                    const [command, ...args] = commandLine.split(' ');
+                    const result = commands[command] ? (typeof commands[command] === 'function' ? commands[command](args) : commands[command]) : `Unknown command: ${command}`;
+                    terminal.innerHTML += `<div>C:\\> ${commandLine}</div><div>${result}</div>`;
+                }
+                input.value = '';
+                terminal.scrollTop = terminal.scrollHeight;
+                terminal.appendChild(inputLine);
+            }
+        });
 
-        function restartGame() {
-            playing = true;
-            obstacles.forEach(obstacle => scene.remove(obstacle));
-            obstacles = [];
-            cube.position.set(0, 0.5, 0);
-            frame = 0;
-            document.getElementById('score').innerText = 'Score: ' + score;
-            hideGameOverMenu();
-            animate();
-        }
-
-        function goToMenu() {
-            playing = false;
-            clearInterval(scoreInterval);
-            obstacles.forEach(obstacle => scene.remove(obstacle));
-            obstacles = [];
-            cube.position.set(0, 0.5, 0);
-            frame = 0;
-            document.getElementById('score').style.display = 'none';
-            hideGameOverMenu();
-            showMenu();
-        }
-
-        function gameOver() {
-            playing = false;
-            clearInterval(scoreInterval);
-            showGameOverMenu();
-        }
+        closeButton.addEventListener('click', closeWindowsInterface);
+        focusInput();
     </script>
 </body>
 </html>
